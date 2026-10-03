@@ -18,7 +18,7 @@ from rich.table import Table
 from config import VIDEO_EXTENSIONS, detect_capcut_drafts_dir, settings
 from app import media
 from app.analyzer import AnalysisError, RecipeAnalyzer, mock_analysis
-from app.capcut_draft import build_draft
+from app.capcut_draft import build_drafts
 from app.report import write_report
 from app.transcriber import Transcriber
 
@@ -41,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--drafts-dir", type=Path, help="Pasta de projetos do CapCut (padrão: detecção automática)")
     p.add_argument("--overwrite", action="store_true", help="Sobrescreve drafts já existentes com o mesmo nome")
     p.add_argument("--mock-claude", action="store_true", help="Não chama a API (análise fictícia, para testes)")
+    p.add_argument("--ab-hooks", action="store_true",
+                   help="Cria 1 draft por gancho (_A, _B, _C) para teste A/B de criativos")
     p.add_argument("--skip-capcut", action="store_true", help="Gera só a análise/relatório, sem criar o draft")
     p.add_argument("--whisper-model", default=settings.whisper_model, help="tiny|base|small|medium|large-v3")
     return p.parse_args()
@@ -77,25 +79,26 @@ def process_video(
     step("analisando com Claude" if analyzer else "análise mock")
     analysis = analyzer.analyze(info, segments, dead) if analyzer else mock_analysis(info, segments)
 
-    draft_path = None
+    drafts = []
     if not args.skip_capcut:
-        step("gerando projeto CapCut")
-        draft_path = build_draft(
+        step("gerando projetos CapCut (A/B)" if args.ab_hooks else "gerando projeto CapCut")
+        drafts = build_drafts(
             drafts_dir, info, analysis,
+            ab_hooks=args.ab_hooks,
             hook_duration_s=settings.hook_duration_s,
             cta_duration_s=settings.cta_duration_s,
             overwrite=args.overwrite,
         )
 
     step("salvando relatório")
-    report = write_report(info, analysis, draft_path)
+    report = write_report(info, analysis, drafts)
     if wav:
         wav.unlink(missing_ok=True)
 
     return Result(
         video=video.name,
         ok=True,
-        detail=f"{draft_path.name if draft_path else '(sem draft)'} · {report.name}",
+        detail=f"{', '.join(d.path.name for d in drafts) or '(sem draft)'} · {report.name}",
         cut=f"{info.duration:.1f}s → {analysis.cut_end_seconds:.1f}s",
     )
 
@@ -130,6 +133,7 @@ def main() -> int:
     console.print(Panel.fit(
         f"[bold]Vídeos:[/] {len(videos)}\n"
         f"[bold]Drafts CapCut:[/] {drafts_dir}"
+        + ("  [magenta](A/B: 3 por vídeo)[/]" if args.ab_hooks and not args.skip_capcut else "")
         + ("" if found else "\n[yellow]CapCut não encontrado — drafts salvos na pasta local acima. "
                             "Copie-os para a pasta de projetos do CapCut ou use --drafts-dir.[/]")
         + f"\n[bold]Claude:[/] {'MOCK' if args.mock_claude else settings.claude_model}"

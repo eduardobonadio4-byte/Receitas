@@ -87,6 +87,7 @@ python main.py "C:\Users\voce\Videos\receitas"
 | Flag | O que faz |
 |---|---|
 | `--mock-claude` | Não chama a API (análise fictícia) — para testar o fluxo |
+| `--ab-hooks` | Cria 3 projetos por vídeo, um por gancho (`_auto_A`, `_B`, `_C`) para teste A/B |
 | `--overwrite` | Recria drafts que já existem com o mesmo nome |
 | `--skip-capcut` | Só gera análise + relatório |
 | `--drafts-dir PASTA` | Força a pasta de projetos do CapCut |
@@ -114,9 +115,22 @@ python main.py "C:\Users\voce\Videos\receitas"
 
 ---
 
-## 4. Próximos passos sugeridos
+## 4. Teste A/B de ganchos (Meta Ads)
 
-- **Variações A/B de gancho:** gerar 3 drafts por vídeo (um por gancho) para testar criativos no Meta Ads.
+```bash
+python main.py "C:\caminho\videos" --ab-hooks
+```
+
+Cada vídeo vira 3 projetos idênticos com gancho diferente. A **variação A é sempre o gancho que o Claude recomendou**, então se você não tiver verba para testar as 3, exporte só a A. O `_video_analise.md` traz uma tabela para anotar os números de cada variação.
+
+Como rodar o teste:
+1. Exporte as 3 variações no CapCut.
+2. No Meta Ads, coloque as 3 como anúncios **no mesmo conjunto** (mesmo público e orçamento). Assim só o gancho muda.
+3. Depois de 48–72h (ou ~1.000 impressões por anúncio), compare a **taxa de hook** (visualizações de 3s ÷ impressões) e o CTR.
+4. O estilo de gancho que ganhar (curiosidade, benefício ou erro comum) vira o padrão. Coloque isso no `SYSTEM_PROMPT` em `app/analyzer.py` para o Claude priorizar esse estilo nos próximos vídeos.
+
+## 5. Próximos passos sugeridos
+
 - **Locução com IA de voz:** mandar o campo `voiceover` para ElevenLabs e adicionar o áudio como trilha no draft.
 - **Legendas automáticas:** exportar a transcrição em `.srt` e importar no draft (`pycapcut` tem `import_srt`).
 - **Notion:** gravar o conteúdo do `_video_analise.md` numa base do Notion como calendário de postagem.
