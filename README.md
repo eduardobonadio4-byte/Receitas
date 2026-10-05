@@ -30,7 +30,17 @@ app/report.py        # relatório Markdown
 
 ## 1. Instalação
 
-### Python 3.10+ e ambiente virtual
+### Jeito rápido (Windows)
+
+1. Coloque o projeto em `C:\Receitas` (fora do OneDrive).
+2. Dê dois cliques em **`INSTALAR.bat`**. Ele confere Python 3.11+ e FFmpeg (e diz como instalar se faltar), cria o `.venv`, instala as dependências e cria o `.env`.
+3. Preencha `ANTHROPIC_API_KEY` e `NOTION_TOKEN` no `.env` (o Bloco de Notas abre sozinho).
+4. Arraste a pasta com o vídeo de teste para cima do **`TESTAR.bat`**. Ele roda primeiro com `--mock-claude` (sem gastar API e sem gravar no Notion) e, se der certo, roda de verdade. Tudo fica salvo em `teste-log.txt`.
+
+O passo a passo manual está abaixo.
+
+
+### Python 3.11+ e ambiente virtual
 
 ```bash
 cd Receitas
@@ -56,7 +66,7 @@ Confirme com `ffmpeg -version` e `ffprobe -version`.
 ### Chave da API
 
 ```bash
-cp .env.example .env      # Windows: copy .env.example .env
+cp .env.exemplo .env      # Windows: copy .env.exemplo .env
 ```
 
 Edite `.env` e coloque sua `ANTHROPIC_API_KEY` (pegue em console.anthropic.com).

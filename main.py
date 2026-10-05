@@ -187,7 +187,7 @@ def process_video(
     return Result(
         video=video.name,
         ok=True,
-        detail=f"{drafts} · {report.name} · Notion: {notion_status}",
+        detail=f"{drafts} · relatório: {report} · Notion: {notion_status}",
         cut=f"{info.duration:.1f}s → {analysis.cut_end_seconds:.1f}s",
     )
 
