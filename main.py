@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
@@ -96,6 +97,7 @@ def process_video(
     drafts_dir: Path,
     args: argparse.Namespace,
     step,
+    step_print=print,
 ) -> Result:
     cache = video.parent / CACHE_DIRNAME
 
@@ -146,8 +148,10 @@ def process_video(
 
     notion_status = "desativado"
     if notion:
-        step("atualizando Notion")
-        action, _page_id = notion.upsert(analysis.recipe_name, {
+        dry_run = args.mock_claude  # no modo mock, só mostra o que seria escrito
+        step("simulando escrita no Notion" if dry_run else "atualizando Notion")
+        links = {v.label: v.link for v in variants}
+        action, written = notion.upsert(analysis.recipe_name, {
             "Gancho A (curiosidade)": analysis.hook_curiosidade,
             "Gancho B (benefício)": analysis.hook_beneficio,
             "Gancho C (erro comum)": analysis.hook_erro_comum,
@@ -156,6 +160,8 @@ def process_video(
             "Descrição": analysis.full_description,
             "CTA": analysis.cta,
             "Link do pin": variants[0].link,  # no A/B, o link da variação A (= Gancho)
+            "Link B": links.get("B"),
+            "Link C": links.get("C"),
             "Roteiro de locução": analysis.voiceover,
             "Estilo": ESTILOS[estilo],
             "No e-book": analysis.in_ebook,
@@ -163,8 +169,14 @@ def process_video(
             "Pasta": analysis.pasta,
             "Origem do vídeo": "Gravado por nós",
             "Status": "Editado",
-        })
-        notion_status = f"linha {action}"
+        }, dry_run=dry_run)
+        notion_status = f"linha \"{analysis.recipe_name}\" {action}"
+        if dry_run:
+            notion_status += " (mock: nada foi gravado)"
+            step_print(f"[magenta]Notion (simulação, nada gravado) — linha \"{analysis.recipe_name}\" "
+                       f"{action}:[/]")
+            for name, value in written.items():
+                step_print(f"   [cyan]{name}[/]: {escape(str(value))}")
 
     step("salvando relatório")
     report = write_report(info, analysis, variants, estilo_label=ESTILOS[estilo], notion_status=notion_status)
@@ -263,7 +275,8 @@ def main() -> int:
                 progress.update(task, description=msg)
 
             try:
-                results.append(process_video(video, transcriber, analyzer, notion, ctx, drafts_dir, args, step))
+                results.append(process_video(video, transcriber, analyzer, notion, ctx, drafts_dir, args, step,
+                                              progress.console.print))
                 progress.console.print(f"[green]✔[/] {video.name}")
             except FileExistsError:
                 results.append(Result(video.name, False, "draft já existe (use --overwrite)"))

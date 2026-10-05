@@ -104,7 +104,7 @@ python main.py "C:\Users\voce\Videos\receitas"
 
 | Flag | O que faz |
 |---|---|
-| `--mock-claude` | Não chama a API (análise fictícia) — para testar o fluxo |
+| `--mock-claude` | Não chama a API (análise fictícia) e **não grava no Notion**: só mostra no terminal o que seria escrito |
 | `--ab-hooks` | Cria 3 projetos por vídeo, um por gancho (`_auto_A`, `_B`, `_C`). Só no estilo Padrão |
 | `--estilo padrao\|cru` | Visual do vídeo quando o Notion ainda não define o `Estilo` da receita (padrão: `padrao`) |
 | `--no-notion` | Não lê nem escreve no Banco de Receitas |
@@ -144,7 +144,7 @@ python main.py "C:\Users\voce\Videos\receitas"
 python main.py "C:\caminho\Semana-01" --ab-hooks
 ```
 
-Cada vídeo vira 3 projetos idênticos, menos o gancho: A (curiosidade), B (benefício) e C (erro comum). Cada um tem seu link (`?src=pin-<slug>-a`, `-b`, `-c`). No Notion, `Gancho` e `Link do pin` ficam com a variação A até o vencedor ser marcado.
+Cada vídeo vira 3 projetos idênticos, menos o gancho: A (curiosidade), B (benefício) e C (erro comum). Cada um tem seu link (`?src=pin-<slug>-a`, `-b`, `-c`). No Notion, `Gancho` e `Link do pin` ficam com a variação A até o vencedor ser marcado; `Link B` e `Link C` recebem os links das outras variações.
 
 Com R$ 10–15/dia de verba:
 1. **Primeiro no orgânico, de graça:** poste as 3 versões como pins normais, com 2 a 3 dias entre elas.

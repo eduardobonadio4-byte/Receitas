@@ -63,6 +63,7 @@ Se a linha já existe, a ferramenta **só preenche o que está vazio**. O que j�
 | Gancho (o que vai pro ar) | Ferramenta põe o A; troca para o vencedor depois |
 | Título do pin, Descrição, CTA | Ferramenta |
 | Link do pin (página de vendas + `?src=pin-<slug>`) | Ferramenta |
+| Link B / Link C (variações do A/B: `-b` e `-c`) | Ferramenta (só com `--ab-hooks`) |
 | Roteiro de locução | Ferramenta |
 | Vídeo editado (link do Drive) | Equipe, depois de exportar |
 | Data de publicação, Status → Agendado / Publicado | Claude (agendamento pelo Chrome) |

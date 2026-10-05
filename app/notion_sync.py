@@ -128,21 +128,30 @@ class NotionClient:
             return {"checkbox": bool(value)}
         return None  # campo inexistente ou tipo não suportado: ignora
 
-    def upsert(self, recipe_name: str, fields: dict[str, object]) -> tuple[str, str]:
-        """Cria ou completa a linha da receita. Retorna (acao, page_id)."""
+    def upsert(self, recipe_name: str, fields: dict[str, object],
+               dry_run: bool = False) -> tuple[str, dict[str, object]]:
+        """Cria ou completa a linha da receita.
+
+        Retorna (acao, campos_escritos). Com dry_run=True nada é enviado ao Notion:
+        só calcula o que seria escrito.
+        """
         row = self.find(recipe_name)
         props: dict[str, dict] = {}
+        written: dict[str, object] = {}
 
         if row is None:
             for name, value in {TITLE_PROP: recipe_name, **fields}.items():
                 if not _is_empty(value) and (enc := self._encode(name, value)):
                     props[name] = enc
+                    written[name] = value
+            if dry_run:
+                return "seria criada", written
             page = self._request("POST", "/pages", json={
                 "parent": {"type": "data_source_id", "data_source_id": self.data_source_id},
                 "properties": props,
             })
             self.rows[recipe_name.strip().casefold()] = NotionRow(page["id"], {TITLE_PROP: recipe_name, **fields})
-            return "criada", page["id"]
+            return "criada", written
 
         for name, value in fields.items():
             current = row.get(name)
@@ -154,9 +163,12 @@ class NotionClient:
                 write = _is_empty(current) and not _is_empty(value)
             if write and (enc := self._encode(name, value)):
                 props[name] = enc
-                row.values[name] = value
+                written[name] = value
 
-        if props:
-            self._request("PATCH", f"/pages/{row.page_id}", json={"properties": props})
-            return "atualizada", row.page_id
-        return "sem mudanças", row.page_id
+        if not props:
+            return "sem mudanças", written
+        if dry_run:
+            return "seria atualizada", written
+        self._request("PATCH", f"/pages/{row.page_id}", json={"properties": props})
+        row.values.update(written)
+        return "atualizada", written
