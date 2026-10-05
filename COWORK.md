@@ -30,8 +30,13 @@ A ferramenta pega uma pasta de vídeos de receita **gravados por nós** e devolv
    - Texto fora dos 15% de cima e dos 20% de baixo, que o Pinterest cobre com a interface.
    - Cores da marca: faixa verde #1A3D2B no gancho e faixa laranja #E07A3A no CTA. Fonte Poppins Bold (a Figtree não existe no CapCut; é a mais parecida).
    - Estilo **Cru**: só o nome da receita, discreto, sem faixa nem preço. Nesse estilo não tem A/B de gancho.
-5. **Atualiza o Notion** (ver "Integração com o Notion").
-6. **Salva um relatório** ao lado do vídeo: `nome-do-video_video_analise.md`.
+5. **Gera 2 pins estáticos** (JPG 1000x1500) na pasta `pins/` ao lado do vídeo:
+   - **Capa** (`<nome>_capa.jpg`): o frame mais bonito do prato pronto, com o título, o CTA e o selo "R$ 27".
+   - **Colagem** (`<nome>_colagem.jpg`): 3 ou 4 passos numerados (ingredientes → preparo → forno → pronto).
+   - A IA escolhe os frames olhando as imagens e descarta borrado, escuro, mão na frente e marca d'água de terceiros. Mesmo assim, **confira antes de postar**.
+   - Exemplos em `docs/exemplos/`.
+6. **Atualiza o Notion** (ver "Integração com o Notion").
+7. **Salva um relatório** ao lado do vídeo: `nome-do-video_video_analise.md`. A seção **Formatos** diz o que postar em cada dia: **vídeo no dia 1, capa no dia 3, colagem no dia 5** (e, no A/B, vídeo B no dia 7 e C no dia 9).
 
 ## Modo teste A/B (`--ab-hooks`)
 Cada vídeo vira **3 projetos no CapCut**, idênticos menos o gancho: `receita_auto_A`, `_B` e `_C`.
@@ -64,6 +69,7 @@ Se a linha já existe, a ferramenta **só preenche o que está vazio**. O que j�
 | Título do pin, Descrição, CTA | Ferramenta |
 | Link do pin (página de vendas + `?src=pin-<slug>`) | Ferramenta |
 | Link B / Link C (variações do A/B: `-b` e `-c`) | Ferramenta (só com `--ab-hooks`) |
+| Link capa / Link colagem (`-capa` e `-colagem`) | Ferramenta (exceto com `--sem-imagens`) |
 | Roteiro de locução | Ferramenta |
 | Vídeo editado (link do Drive) | Equipe, depois de exportar |
 | Data de publicação, Status → Agendado / Publicado | Claude (agendamento pelo Chrome) |

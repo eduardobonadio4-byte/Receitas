@@ -33,7 +33,7 @@ echo Instalando as dependencias - pode levar alguns minutos ...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip --quiet
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto erro_pip
-".venv\Scripts\python.exe" -c "import faster_whisper, pycapcut, anthropic, rich, dotenv, requests"
+".venv\Scripts\python.exe" -c "import faster_whisper, pycapcut, anthropic, rich, dotenv, requests, PIL, numpy"
 if errorlevel 1 goto erro_pip
 echo [OK] Dependencias instaladas
 

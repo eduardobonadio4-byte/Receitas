@@ -50,9 +50,14 @@ ESTILOS = {"padrao": "Padrão (com preço)", "cru": "Cru (natural)"}
 # ---------------------------------------------------------------- Marca (CapCut)
 BRAND_GREEN = "#1A3D2B"
 BRAND_ORANGE = "#E07A3A"
+BRAND_LIGHT_GREEN = "#9BE3BE"
 # Figtree não existe no catálogo de fontes do CapCut; Poppins Bold é a mais próxima.
 BRAND_FONT = os.environ.get("CAPCUT_FONT", "Poppins_Bold")
 CANVAS_W, CANVAS_H = 1080, 1920  # 9:16
+
+# Pins estáticos (capa e colagem): 2:3, mesma fonte do CapCut.
+PIN_W, PIN_H = 1000, 1500
+PIN_FONT_FILE = Path(__file__).resolve().parent / "assets" / "fonts" / "Poppins-Bold.ttf"
 
 # Área segura do Pinterest: nada nos 15% de cima nem nos 20% de baixo.
 # No CapCut, transform_y vai de +1 (topo) a -1 (base), em unidades de meia tela:

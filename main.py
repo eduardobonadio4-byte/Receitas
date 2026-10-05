@@ -23,6 +23,7 @@ from app import media
 from app.analyzer import AnalysisContext, AnalysisError, RecipeAnalysis, RecipeAnalyzer, mock_analysis
 from app.capcut_draft import DraftVariant, build_drafts
 from app.notion_sync import NotionClient, NotionError, NotionRow
+from app.pin_images import PinImages, build_pin_images
 from app.pinterest import pin_link, slugify
 from app.report import write_report
 from app.transcriber import Transcriber
@@ -50,6 +51,7 @@ def parse_args() -> argparse.Namespace:
                    help="Cria 1 draft por gancho (_A, _B, _C) para teste A/B (só no estilo padrão)")
     p.add_argument("--estilo", choices=sorted(ESTILOS), default="padrao",
                    help="Visual do vídeo quando o Notion ainda não define o Estilo (padrão: padrao)")
+    p.add_argument("--sem-imagens", action="store_true", help="Não gera a capa nem a colagem (só o vídeo)")
     p.add_argument("--no-notion", action="store_true", help="Não lê nem escreve no Banco de Receitas")
     p.add_argument("--skip-capcut", action="store_true", help="Gera só a análise/relatório, sem criar o draft")
     p.add_argument("--whisper-model", default=settings.whisper_model, help="tiny|base|small|medium|large-v3")
@@ -146,6 +148,14 @@ def process_video(
             overwrite=args.overwrite,
         )
 
+    pins = PinImages()
+    if not args.sem_imagens:
+        step("gerando capa e colagem" + (" (Claude escolhendo frames)" if analyzer else ""))
+        pins = build_pin_images(info, analysis, out_dir=video.parent / "pins",
+                                work=cache / "frames" / video.stem, picker=analyzer)
+    capa_link = pin_link(SALES_PAGE_URL, slug, "capa") if pins.capa else None
+    colagem_link = pin_link(SALES_PAGE_URL, slug, "colagem") if pins.colagem else None
+
     notion_status = "desativado"
     if notion:
         dry_run = args.mock_claude  # no modo mock, só mostra o que seria escrito
@@ -162,6 +172,8 @@ def process_video(
             "Link do pin": variants[0].link,  # no A/B, o link da variação A (= Gancho)
             "Link B": links.get("B"),
             "Link C": links.get("C"),
+            "Link capa": capa_link,
+            "Link colagem": colagem_link,
             "Roteiro de locução": analysis.voiceover,
             "Estilo": ESTILOS[estilo],
             "No e-book": analysis.in_ebook,
@@ -179,11 +191,16 @@ def process_video(
                 step_print(f"   [cyan]{name}[/]: {escape(str(value))}")
 
     step("salvando relatório")
-    report = write_report(info, analysis, variants, estilo_label=ESTILOS[estilo], notion_status=notion_status)
+    report = write_report(info, analysis, variants, estilo_label=ESTILOS[estilo], notion_status=notion_status,
+                          pins=pins, capa_link=capa_link, colagem_link=colagem_link)
+    for note in pins.notes:
+        step_print(f"[yellow]⚠ {video.name}: {escape(note)}[/]")
     if wav:
         wav.unlink(missing_ok=True)
 
     drafts = ", ".join(v.path.name for v in variants if v.path) or "(sem draft)"
+    if pins.capa:
+        drafts += f" · pins: {pins.capa.name}, {pins.colagem.name}"
     return Result(
         video=video.name,
         ok=True,

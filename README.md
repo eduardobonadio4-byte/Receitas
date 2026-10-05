@@ -10,9 +10,13 @@ CLI em Python que pega uma pasta de vídeos de receita **gravados pela equipe** 
    - **Padrão (com preço):** gancho na faixa verde `#1A3D2B` (0–3s) + CTA na faixa laranja `#E07A3A` (últimos 3s).
    - **Cru (natural):** só o nome da receita, discreto, sem faixa nem preço.
 6. Atualiza a linha da receita no **Banco de Receitas do Notion** (cria se não existir).
-7. Salva `<nome_do_video>_video_analise.md` ao lado do vídeo.
+7. Gera 2 pins estáticos JPG 1000x1500 (2:3) em `pins/`, ao lado do vídeo, sem gravar nada a mais:
+   - **`<nome>_capa.jpg`**: o melhor frame do prato pronto, com degradê verde, título com a palavra-chave em laranja, CTA e selo "R$ 27".
+   - **`<nome>_colagem.jpg`**: 3 ou 4 momentos-chave (ingredientes → preparo → forno → pronto) numa grade numerada.
+   - Os frames são pré-filtrados por nitidez e brilho, e o **Claude escolhe olhando as imagens**: descarta borrado, escuro, mão na frente e texto ou marca d'água de terceiros. No `--mock-claude` só vale o filtro automático.
+8. Salva `<nome_do_video>_video_analise.md` ao lado do vídeo, com a seção **Formatos**: vídeo no dia 1, capa no dia 3, colagem no dia 5 (variações B/C do A/B nos dias 7 e 9).
 
-Links de cada pin: `https://receitaspraticasfit.com.br/?src=pin-<slug>` (no A/B: `-a`, `-b`, `-c`).
+Links de cada pin: `https://receitaspraticasfit.com.br/?src=pin-<slug>` (no A/B: `-a`, `-b`, `-c`; capa: `-capa`; colagem: `-colagem`).
 
 ```
 main.py              # CLI + orquestração + progresso (rich)
@@ -23,6 +27,8 @@ app/analyzer.py      # Claude API com saída estruturada (Pydantic) + validaçã
 app/capcut_draft.py  # monta o draft do CapCut (via pycapcut)
 app/notion_sync.py   # Banco de Receitas (API oficial do Notion)
 app/pinterest.py     # slug e links ?src
+app/pin_images.py    # capa e colagem (frames + Pillow)
+assets/fonts/        # Poppins Bold (licença OFL), usada nas imagens
 app/report.py        # relatório Markdown
 ```
 
@@ -118,6 +124,7 @@ python main.py "C:\Users\voce\Videos\receitas"
 | `--ab-hooks` | Cria 3 projetos por vídeo, um por gancho (`_auto_A`, `_B`, `_C`). Só no estilo Padrão |
 | `--estilo padrao\|cru` | Visual do vídeo quando o Notion ainda não define o `Estilo` da receita (padrão: `padrao`) |
 | `--no-notion` | Não lê nem escreve no Banco de Receitas |
+| `--sem-imagens` | Pula a capa e a colagem (gera só o vídeo) |
 | `--overwrite` | Recria drafts que já existem com o mesmo nome |
 | `--skip-capcut` | Só gera análise + relatório |
 | `--drafts-dir PASTA` | Força a pasta de projetos do CapCut |
