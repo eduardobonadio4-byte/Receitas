@@ -1,7 +1,7 @@
 """CLI: processa uma pasta de vídeos de receita e gera projetos prontos no CapCut Desktop.
 
 Uso:
-    python main.py <pasta_dos_videos> [--overwrite] [--mock-claude] [--drafts-dir PASTA]
+    python main.py <pasta_dos_videos> [--ab-hooks] [--estilo padrao|cru] [--overwrite] [--mock-claude]
 """
 from __future__ import annotations
 
@@ -15,10 +15,14 @@ from rich.panel import Panel
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from config import VIDEO_EXTENSIONS, detect_capcut_drafts_dir, settings
+from config import (
+    ESTILOS, REFERENCE_DIR_NAMES, SALES_PAGE_URL, VIDEO_EXTENSIONS, detect_capcut_drafts_dir, settings,
+)
 from app import media
-from app.analyzer import AnalysisError, RecipeAnalyzer, mock_analysis
-from app.capcut_draft import build_drafts
+from app.analyzer import AnalysisContext, AnalysisError, RecipeAnalysis, RecipeAnalyzer, mock_analysis
+from app.capcut_draft import DraftVariant, build_drafts
+from app.notion_sync import NotionClient, NotionError, NotionRow
+from app.pinterest import pin_link, slugify
 from app.report import write_report
 from app.transcriber import Transcriber
 
@@ -36,26 +40,59 @@ class Result:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Automação de vídeos de receita → projetos CapCut")
-    p.add_argument("input_dir", type=Path, help="Pasta com os vídeos (.mp4, .mov, .mkv)")
+    p = argparse.ArgumentParser(description="Automação de vídeos de receita → projetos CapCut + Notion")
+    p.add_argument("input_dir", type=Path, help="Pasta com os vídeos gravados por nós (.mp4, .mov, .mkv)")
     p.add_argument("--drafts-dir", type=Path, help="Pasta de projetos do CapCut (padrão: detecção automática)")
     p.add_argument("--overwrite", action="store_true", help="Sobrescreve drafts já existentes com o mesmo nome")
     p.add_argument("--mock-claude", action="store_true", help="Não chama a API (análise fictícia, para testes)")
     p.add_argument("--ab-hooks", action="store_true",
-                   help="Cria 1 draft por gancho (_A, _B, _C) para teste A/B de criativos")
+                   help="Cria 1 draft por gancho (_A, _B, _C) para teste A/B (só no estilo padrão)")
+    p.add_argument("--estilo", choices=sorted(ESTILOS), default="padrao",
+                   help="Visual do vídeo quando o Notion ainda não define o Estilo (padrão: padrao)")
+    p.add_argument("--no-notion", action="store_true", help="Não lê nem escreve no Banco de Receitas")
     p.add_argument("--skip-capcut", action="store_true", help="Gera só a análise/relatório, sem criar o draft")
     p.add_argument("--whisper-model", default=settings.whisper_model, help="tiny|base|small|medium|large-v3")
     return p.parse_args()
+
+
+def is_reference_path(path: Path) -> bool:
+    return any(part.lower() in REFERENCE_DIR_NAMES for part in path.resolve().parts)
 
 
 def find_videos(folder: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS)
 
 
+def merge_with_notion(analysis: RecipeAnalysis, row: NotionRow | None) -> None:
+    """O que a equipe já escreveu no Notion prevalece sobre o que a IA gerou (vídeo e Notion batem)."""
+    if row is None:
+        return
+    keep = {
+        "Gancho A (curiosidade)": "hook_curiosidade",
+        "Gancho B (benefício)": "hook_beneficio",
+        "Gancho C (erro comum)": "hook_erro_comum",
+        "Título do pin": "pin_title",
+        "Roteiro de locução": "voiceover",
+        "CTA": "cta",
+        "Categoria": "categoria",
+        "Pasta": "pasta",
+    }
+    for notion_field, attr in keep.items():
+        value = row.get(notion_field)
+        if value:
+            setattr(analysis, attr, value)
+    if row.get("Descrição"):
+        analysis.pin_description, analysis.hashtags = row.get("Descrição"), []
+    if row.get("No e-book"):
+        analysis.in_ebook = True
+
+
 def process_video(
     video: Path,
     transcriber: Transcriber,
     analyzer: RecipeAnalyzer | None,
+    notion: NotionClient | None,
+    ctx: AnalysisContext,
     drafts_dir: Path,
     args: argparse.Namespace,
     step,
@@ -77,28 +114,68 @@ def process_video(
     dead = media.detect_dead_zones(video, info.duration, has_audio=info.has_audio)
 
     step("analisando com Claude" if analyzer else "análise mock")
-    analysis = analyzer.analyze(info, segments, dead) if analyzer else mock_analysis(info, segments)
+    analysis = analyzer.analyze(info, segments, dead, ctx) if analyzer else mock_analysis(info, segments, ctx)
 
-    drafts = []
+    row = notion.find(analysis.recipe_name) if notion else None
+    merge_with_notion(analysis, row)
+
+    # Estilo: o do Notion manda; senão, o da linha de comando.
+    estilo = next((k for k, label in ESTILOS.items() if row and row.get("Estilo") == label), args.estilo)
+    ab = args.ab_hooks and estilo == "padrao"
+
+    slug = slugify(analysis.recipe_name)
+    on_air_hook = (row.get("Gancho") if row else None) or analysis.hook_curiosidade
+    if ab:
+        variants = [DraftVariant(label, hook, pin_link(SALES_PAGE_URL, slug, label))
+                    for label, hook in zip("ABC", analysis.hooks)]
+    else:
+        variants = [DraftVariant("", on_air_hook, pin_link(SALES_PAGE_URL, slug))]
+
     if not args.skip_capcut:
-        step("gerando projetos CapCut (A/B)" if args.ab_hooks else "gerando projeto CapCut")
-        drafts = build_drafts(
-            drafts_dir, info, analysis,
-            ab_hooks=args.ab_hooks,
+        step("gerando projetos CapCut (A/B)" if ab else "gerando projeto CapCut")
+        build_drafts(
+            drafts_dir, info, variants,
+            recipe_name=analysis.recipe_name,
+            cut_end_s=analysis.cut_end_seconds,
+            cta=analysis.cta,
+            estilo=estilo,
             hook_duration_s=settings.hook_duration_s,
             cta_duration_s=settings.cta_duration_s,
             overwrite=args.overwrite,
         )
 
+    notion_status = "desativado"
+    if notion:
+        step("atualizando Notion")
+        action, _page_id = notion.upsert(analysis.recipe_name, {
+            "Gancho A (curiosidade)": analysis.hook_curiosidade,
+            "Gancho B (benefício)": analysis.hook_beneficio,
+            "Gancho C (erro comum)": analysis.hook_erro_comum,
+            "Gancho": analysis.hook_curiosidade,
+            "Título do pin": analysis.pin_title,
+            "Descrição": analysis.full_description,
+            "CTA": analysis.cta,
+            "Link do pin": variants[0].link,  # no A/B, o link da variação A (= Gancho)
+            "Roteiro de locução": analysis.voiceover,
+            "Estilo": ESTILOS[estilo],
+            "No e-book": analysis.in_ebook,
+            "Categoria": analysis.categoria,
+            "Pasta": analysis.pasta,
+            "Origem do vídeo": "Gravado por nós",
+            "Status": "Editado",
+        })
+        notion_status = f"linha {action}"
+
     step("salvando relatório")
-    report = write_report(info, analysis, drafts)
+    report = write_report(info, analysis, variants, estilo_label=ESTILOS[estilo], notion_status=notion_status)
     if wav:
         wav.unlink(missing_ok=True)
 
+    drafts = ", ".join(v.path.name for v in variants if v.path) or "(sem draft)"
     return Result(
         video=video.name,
         ok=True,
-        detail=f"{', '.join(d.path.name for d in drafts) or '(sem draft)'} · {report.name}",
+        detail=f"{drafts} · {report.name} · Notion: {notion_status}",
         cut=f"{info.duration:.1f}s → {analysis.cut_end_seconds:.1f}s",
     )
 
@@ -108,6 +185,10 @@ def main() -> int:
 
     if not args.input_dir.is_dir():
         console.print(f"[red]Pasta não encontrada:[/] {args.input_dir}")
+        return 1
+
+    if is_reference_path(args.input_dir):
+        console.print("[red]Essa pasta é de referências (TikTok). Só processamos vídeos gravados por nós.[/]")
         return 1
 
     try:
@@ -141,6 +222,26 @@ def main() -> int:
         title="🍳 Receitas → CapCut",
     ))
 
+    notion, ctx = None, AnalysisContext()
+    if not args.no_notion:
+        if not settings.notion_token:
+            console.print("[yellow]NOTION_TOKEN não definido — seguindo sem Notion (use --no-notion para "
+                          "esconder este aviso).[/]")
+        else:
+            try:
+                notion = NotionClient(settings.notion_token, settings.notion_data_source_id)
+                with console.status("Lendo o Banco de Receitas no Notion..."):
+                    notion.load()
+            except (NotionError, OSError) as e:
+                console.print(f"[red]Notion: {e}[/]\nCorrija o .env ou rode com --no-notion.")
+                return 1
+            ctx = AnalysisContext(
+                existing_recipes=notion.recipe_names,
+                categorias=notion.options("Categoria") or ctx.categorias,
+                pastas=notion.options("Pasta") or ctx.pastas,
+            )
+            console.print(f"Notion: {len(notion.rows)} receitas no banco.")
+
     transcriber = Transcriber(args.whisper_model, settings.whisper_language, settings.whisper_device)
     analyzer = None if args.mock_claude else RecipeAnalyzer(settings.anthropic_api_key, settings.claude_model)
 
@@ -162,12 +263,12 @@ def main() -> int:
                 progress.update(task, description=msg)
 
             try:
-                results.append(process_video(video, transcriber, analyzer, drafts_dir, args, step))
+                results.append(process_video(video, transcriber, analyzer, notion, ctx, drafts_dir, args, step))
                 progress.console.print(f"[green]✔[/] {video.name}")
             except FileExistsError:
                 results.append(Result(video.name, False, "draft já existe (use --overwrite)"))
                 progress.console.print(f"[yellow]⚠[/] {video.name}: draft já existe (use --overwrite)")
-            except (media.FFmpegError, AnalysisError, ValueError, OSError) as e:
+            except (media.FFmpegError, AnalysisError, NotionError, ValueError, OSError) as e:
                 results.append(Result(video.name, False, str(e)))
                 progress.console.print(f"[red]✘[/] {video.name}: {e}")
             except Exception as e:  # erro inesperado (ex.: download do modelo Whisper) não derruba o lote

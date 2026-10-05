@@ -1,81 +1,98 @@
-# Automação de Receitas → CapCut: o que é e como vamos usar
+# Automação de Receitas → CapCut → Pinterest (versão Receitas Práticas)
 
 ## Resumo
-Criamos uma ferramenta que transforma uma pasta de vídeos de receita brutos em **projetos do CapCut prontos para exportar**: o vídeo já vem cortado e com os textos na tela. Junto com cada vídeo sai um arquivo com **legenda, ingredientes, hashtags e roteiro de locução**. Edição que levava de 15 a 20 minutos por vídeo vira só revisar e exportar.
+A ferramenta pega uma pasta de vídeos de receita **gravados por nós** e devolve **projetos do CapCut prontos para exportar**, com o vídeo cortado e o gancho e o CTA na tela. Para cada vídeo ela também preenche a linha da receita no **Banco de Receitas do Notion**: título do pin, descrição, os 3 ganchos, CTA, link com `?src` e roteiro de locução. A edição cai de 15 a 20 minutos para cerca de 2 minutos de revisão por vídeo.
+
+**Regra de origem:** só entra na ferramenta vídeo gravado por nós. Os vídeos do TikTok em `1-referencias/` servem só de guia de gravação e nunca são editados nem postados (no Notion: Origem = "Referência (não postar)").
+
+## Onde isso encaixa no funil
+- **Canal:** Pinterest (orgânico + Pinterest Ads). Não usamos Meta neste projeto.
+- **Destino de cada pin: sempre a página de vendas** (`https://receitaspraticasfit.com.br/?src=pin-<slug>`). Quanto mais pin levar pra venda, melhor.
+  - Receita **que está no Gostosuras Fit** ("No e-book" marcado): CTA "Essa e mais 24 receitas por R$ 27".
+  - Receita **que não está no e-book**: o pin entrega a receita (ingredientes/passo na descrição) e o CTA vende o produto sem prometer aquela receita lá dentro: "Quer mais receitas assim? 25 por R$ 27".
+- **Estilo** no Notion é só o visual do vídeo: *Cru* (vídeo + nome discreto) ou *Padrão* (faixa verde + preço). Os dois vão pra página de vendas.
+- **PDF grátis (`/receitas-gratis/`)** fica só para a **Campanha B (isca)** e para os pins antigos já revisados.
 
 ## O que a ferramenta faz sozinha (para cada vídeo da pasta)
-1. **Ouve o vídeo e transcreve a fala**, direto no computador.
-2. **Encontra as sobras do final**: imagem parada, silêncio, "tchau", câmera sendo desligada.
+1. **Transcreve a fala** localmente.
+2. **Encontra as sobras do final:** imagem parada, silêncio, "tchau", câmera desligando.
 3. **A IA (Claude) analisa a receita** e entrega:
-   - o **ponto de corte** final do vídeo;
-   - **3 opções de gancho** (o texto que aparece nos primeiros 3 segundos para segurar quem está rolando o feed);
-   - **1 CTA** para o final (ex.: "Salva pra fazer no fim de semana");
-   - **legenda pronta** com ingredientes e hashtags;
-   - **roteiro de locução** de até 45 palavras, para usar depois com voz de IA.
-4. **Cria o projeto no CapCut** com o vídeo cortado, o gancho no início (0 a 3s) e o CTA nos últimos 3s.
-5. **Salva um relatório** ao lado do vídeo original: `nome-do-video_video_analise.md`.
+   - o **ponto de corte** final;
+   - **3 ganchos** de até 6 palavras, um de cada estilo:
+     - A: **curiosidade** ("Big Mac fit? Existe.")
+     - B: **benefício** ("Pizza sem forno em 10 minutos")
+     - C: **erro comum** ("Seu brigadeiro fit fica duro?")
+   - **CTA de Pinterest** que leva à página de vendas: "Essa e mais 24 receitas por R$ 27" (receita do e-book) ou "Quer mais receitas assim? 25 por R$ 27" (fora do e-book). Nunca usar "salva o post", "leia a legenda" ou "chama no direct".
+   - **Título do pin** (até 100 caracteres, com a palavra-chave no começo: "coxinha fit", "doce sem açúcar", "marmita fit"…);
+   - **Descrição do pin** (2 a 3 frases + 3 hashtags);
+   - **roteiro de locução** de até 45 palavras.
+4. **Cria o projeto no CapCut** em 9:16, com o vídeo cortado, o gancho de 0 a 3 s e o CTA nos últimos 3 s.
+   - Texto fora dos 15% de cima e dos 20% de baixo, que o Pinterest cobre com a interface.
+   - Cores da marca: faixa verde #1A3D2B no gancho e faixa laranja #E07A3A no CTA. Fonte Poppins Bold (a Figtree não existe no CapCut; é a mais parecida).
+   - Estilo **Cru**: só o nome da receita, discreto, sem faixa nem preço. Nesse estilo não tem A/B de gancho.
+5. **Atualiza o Notion** (ver "Integração com o Notion").
+6. **Salva um relatório** ao lado do vídeo: `nome-do-video_video_analise.md`.
 
-## Modo teste A/B (o mais importante para os anúncios)
-Com a opção `--ab-hooks`, cada vídeo vira **3 projetos no CapCut**, iguais em tudo, menos no gancho:
-- `receita_auto_A` → gancho que a IA recomendou como o melhor
-- `receita_auto_B` → segunda opção
-- `receita_auto_C` → terceira opção
+## Modo teste A/B (`--ab-hooks`)
+Cada vídeo vira **3 projetos no CapCut**, idênticos menos o gancho: `receita_auto_A`, `_B` e `_C`.
 
-Os 3 ganchos sempre seguem estilos diferentes: **curiosidade**, **benefício** e **erro comum/polêmica**. O objetivo é descobrir com dados qual estilo prende mais o nosso público, em vez de escolher no achismo.
+**Como testar com a nossa verba (R$ 10 a 15/dia):**
+1. **Primeiro no orgânico, de graça:** posta as 3 versões como pins normais, com 2 a 3 dias entre elas. Cada uma leva o próprio `?src` (`pin-<slug>-a`, `-b`, `-c`).
+2. **Só vira anúncio o vencedor do orgânico.** O A/B pago fica para 1 vídeo por semana no máximo, com as 3 variações no **mesmo grupo de anúncios** da **Campanha A (venda)**.
+3. Não decidir com menos de ~1.000 impressões por variação.
 
-## Como vamos usar no dia a dia
+## Métricas (Pinterest, não Meta)
+| Métrica | Onde ver | Para quê |
+|---|---|---|
+| **Taxa de visualização** = visualizações de vídeo (2 s+) ÷ impressões | Pinterest Analytics / Ads | Principal: o gancho prendeu? |
+| **Cliques de saída** | Analytics / Ads | Desempate: levou pro site? |
+| **Salvamentos** | Analytics | Sinal de alcance futuro no orgânico |
+| **Leads / vendas** | Hotmart Send e Hotmart, pelo `?src` | O que paga a conta |
 
-**1. Gravação → pasta**
-Os vídeos brutos vão para uma pasta da semana (ex.: `Receitas/Semana-01`). Formatos aceitos: MP4, MOV e MKV.
+**Padrão vencedor:** depois de **5 a 10 vídeos**, vemos qual estilo (A, B ou C) ganhou mais vezes. Esse estilo vira regra no prompt da IA.
 
-**2. Rodar a ferramenta** (Eduardo roda no computador)
-```
-python main.py "caminho/da/pasta" --ab-hooks
-```
+## Integração com o Notion (Banco de Receitas)
+A ferramenta procura a linha pela coluna **Receita**. Se não achar, cria uma nova, com **Status = "Editado"** e **Origem do vídeo = "Gravado por nós"**.
 
-**3. Revisar no CapCut** (o passo humano, ~2 min por vídeo)
-- Abrir o CapCut. Os projetos aparecem como `_auto_A`, `_B` e `_C`.
-- Conferir: o corte ficou bom? O texto está legível e não cobre a comida?
-- Ajustar fonte e posição se precisar e **exportar**.
-- **Não mover nem renomear o vídeo original** depois de rodar a ferramenta, senão o CapCut perde o arquivo.
+Se a linha já existe, a ferramenta **só preenche o que está vazio**. O que já foi escrito no Notion (ganchos, título, descrição, CTA, estilo) **vale também para o vídeo**: o CapCut usa esses textos, então vídeo e Notion sempre batem. O Status passa para "Editado" se estava em Ideia ou Texto pronto; Agendado e Publicado não mudam.
 
-**4. Revisar o relatório (`_video_analise.md`)**
-- Conferir a legenda e os ingredientes. A IA pode errar quantidades se elas não forem faladas no vídeo.
-- Copiar a legenda e as hashtags na hora de postar.
+| Campo do Notion | Quem preenche |
+|---|---|
+| Receita, Categoria, Pasta, No e-book, Estilo | Ferramenta sugere, equipe confere |
+| Gancho A (curiosidade) / B (benefício) / C (erro comum) | Ferramenta |
+| Gancho (o que vai pro ar) | Ferramenta põe o A; troca para o vencedor depois |
+| Título do pin, Descrição, CTA | Ferramenta |
+| Link do pin (página de vendas + `?src=pin-<slug>`) | Ferramenta |
+| Roteiro de locução | Ferramenta |
+| Vídeo editado (link do Drive) | Equipe, depois de exportar |
+| Data de publicação, Status → Agendado / Publicado | Claude (agendamento pelo Chrome) |
+| Impressões, Taxa de visualização %, Cliques de saída, Salvamentos, Vendas/Leads, Gancho vencedor | Claude, 7 dias depois de publicar |
 
-**5. Subir os anúncios no Meta Ads**
-- As 3 variações (A, B, C) do mesmo vídeo vão **no mesmo conjunto de anúncios**, com o mesmo público e o mesmo orçamento. Assim só o gancho muda.
-- Verba mínima: cerca de **R$30 por variação**. Com menos que isso o resultado é sorte, não dado.
-
-**6. Anotar os resultados (depois de 48 a 72h)**
-O relatório de cada vídeo tem uma tabela pronta:
-
-| Var. | Gancho | Hook rate (3s) | CTR | CPM |
-|---|---|---|---|---|
-
-- **Hook rate** = visualizações de 3s ÷ impressões. É a métrica principal: mostra se o gancho prendeu.
-- **CTR** desempata.
-
-**7. Definir o padrão vencedor**
-Não escolhemos vencedor vídeo a vídeo. Depois de **5 a 10 vídeos testados**, vemos **qual estilo ganhou mais vezes** (curiosidade, benefício ou erro comum). Esse estilo vira regra para a IA, e os próximos ganchos já saem nesse padrão.
+## Fluxo do dia a dia
+1. **Gravar → pasta da semana:** `04-Conteudo Pinterest/Gravados/Semana-01` (MP4, MOV ou MKV).
+2. **Rodar a ferramenta** (Eduardo): `python main.py "caminho/da/pasta" --ab-hooks`
+3. **Revisar no CapCut** (~2 min por vídeo):
+   - Conferir o corte, a legibilidade e se o texto não cobre a comida.
+   - Exportar para `2-editados/`.
+   - Não mover nem renomear o vídeo original depois de rodar a ferramenta.
+4. **Revisar no Notion:** ingredientes, título, descrição e se o CTA bate com "No e-book". Subir o vídeo no Drive e colar o link.
+5. **Agendar:** Claude agenda 2 a 3 pins por dia pelo Chrome e muda o Status para "Agendado".
+6. **Medir (7 dias):** Claude preenche as métricas no Notion e marca o gancho vencedor.
 
 ## Quem faz o quê
 | Etapa | Responsável |
 |---|---|
-| Gravar e colocar os vídeos na pasta | Equipe |
-| Rodar a ferramenta | Eduardo |
-| Revisar e exportar no CapCut | Equipe |
-| Revisar legenda/ingredientes e postar | Equipe |
-| Subir os anúncios A/B | Eduardo |
-| Preencher a tabela de resultados | Equipe |
-| Atualizar o estilo vencedor na IA | Eduardo |
+| Gravar a receita (usando a referência só como guia) | Du e equipe |
+| Rodar a ferramenta | Du |
+| Revisar e exportar no CapCut | Du e equipe |
+| Revisar a linha no Notion e subir o vídeo no Drive | Du e equipe |
+| Agendar pins no Pinterest | Claude |
+| Preencher métricas e o gancho vencedor | Claude |
+| Subir o A/B pago (1 vídeo por semana) | Claude monta pausado, Du liga |
+| Atualizar o estilo vencedor no prompt da IA | Du |
 
-## Limitações (para não ter surpresa)
-- A IA decide o corte pela **fala** e pela **imagem parada**. Se o vídeo termina com um take bonito do prato em silêncio, ela pode cortar antes. Sempre confira o final.
-- Ingredientes e quantidades que **não foram falados** no vídeo são deduzidos pela IA e podem vir errados. Sempre revise.
-- Se o CapCut atualizar e os projetos pararem de aparecer, avise o Eduardo: é ajuste técnico, não precisa refazer nada.
-
-## Próximos passos planejados
-- Legendas automáticas da fala já colocadas no vídeo (aumenta a retenção de quem assiste sem som).
-- Locução com voz de IA a partir do roteiro gerado.
-- Resultados do A/B registrados no Notion como calendário de postagem.
+## Limitações
+- O corte é decidido pela **fala** e pela **imagem parada**. Se o vídeo termina com um take bonito do prato em silêncio, a IA pode cortar antes. Sempre confira o final.
+- Quantidades **não faladas** no vídeo são deduzidas e podem vir erradas. Sempre revise.
+- Nada de promessa de emagrecimento, "low carb" ou resultado: só "fit", "leve", "sem adicionar açúcar" e "rico em proteína" quando for verdade.
+- Se o CapCut atualizar e os projetos sumirem, é ajuste técnico. Não precisa refazer nada.
