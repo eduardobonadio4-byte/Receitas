@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import wave
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+import numpy as np
 
 
 @dataclass
@@ -11,6 +14,19 @@ class Segment:
     start: float
     end: float
     text: str
+
+
+def load_wav(path: Path) -> np.ndarray:
+    """Lê o WAV mono 16 kHz/16 bits que o FFmpeg já extraiu e devolve float32 em [-1, 1].
+
+    Passar o áudio pronto evita o decodificador interno do faster-whisper (PyAV), que quebra em
+    algumas versões ("open() got an unexpected keyword argument 'metadata_errors'").
+    """
+    with wave.open(str(path), "rb") as wav:
+        if wav.getsampwidth() != 2 or wav.getnchannels() != 1:
+            raise ValueError(f"WAV inesperado em {path.name}: precisa ser mono 16 bits")
+        frames = wav.readframes(wav.getnframes())
+    return np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
 
 
 class Transcriber:
@@ -34,7 +50,7 @@ class Transcriber:
 
         model = self._load()
         segments, _info = model.transcribe(
-            str(audio_path),
+            load_wav(audio_path),
             language=self.language or None,
             vad_filter=True,
             beam_size=5,
