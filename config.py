@@ -111,7 +111,7 @@ class Settings:
     claude_model: str = field(default_factory=lambda: os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5"))
     whisper_model: str = field(default_factory=lambda: os.environ.get("WHISPER_MODEL", "small"))
     whisper_language: str = field(default_factory=lambda: os.environ.get("WHISPER_LANGUAGE", "pt"))
-    whisper_device: str = field(default_factory=lambda: os.environ.get("WHISPER_DEVICE", "auto"))
+    whisper_device: str = field(default_factory=lambda: os.environ.get("WHISPER_DEVICE", "cpu"))
 
     notion_token: str | None = field(default_factory=lambda: os.environ.get("NOTION_TOKEN"))
     notion_data_source_id: str = field(default_factory=lambda: os.environ.get(

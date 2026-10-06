@@ -30,7 +30,7 @@ def load_wav(path: Path) -> np.ndarray:
 
 
 class Transcriber:
-    def __init__(self, model_size: str, language: str, device: str = "auto"):
+    def __init__(self, model_size: str, language: str, device: str = "cpu"):
         self.model_size = model_size
         self.language = language
         self.device = device
@@ -44,18 +44,29 @@ class Transcriber:
             self._model = WhisperModel(self.model_size, device=self.device, compute_type=compute_type)
         return self._model
 
-    def transcribe(self, audio_path: Path, cache_path: Path | None = None) -> list[Segment]:
-        if cache_path and cache_path.exists():
-            return [Segment(**s) for s in json.loads(cache_path.read_text(encoding="utf-8"))]
-
-        model = self._load()
-        segments, _info = model.transcribe(
-            load_wav(audio_path),
+    def _run(self, audio: np.ndarray) -> list[Segment]:
+        segments, _info = self._load().transcribe(
+            audio,
             language=self.language or None,
             vad_filter=True,
             beam_size=5,
         )
-        result = [Segment(round(s.start, 2), round(s.end, 2), s.text.strip()) for s in segments]
+        # A transcrição acontece enquanto os segmentos são lidos, então os erros de GPU aparecem aqui.
+        return [Segment(round(s.start, 2), round(s.end, 2), s.text.strip()) for s in segments]
+
+    def transcribe(self, audio_path: Path, cache_path: Path | None = None) -> list[Segment]:
+        if cache_path and cache_path.exists():
+            return [Segment(**s) for s in json.loads(cache_path.read_text(encoding="utf-8"))]
+
+        audio = load_wav(audio_path)
+        try:
+            result = self._run(audio)
+        except RuntimeError as e:
+            # GPU NVIDIA detectada mas sem as bibliotecas CUDA (cublas/cudnn): cai para a CPU e segue.
+            if self.device == "cpu" or not any(k in str(e).lower() for k in ("cublas", "cudnn", "cuda")):
+                raise
+            self.device, self._model = "cpu", None
+            result = self._run(audio)
 
         if cache_path:
             cache_path.parent.mkdir(parents=True, exist_ok=True)

@@ -133,7 +133,7 @@ python main.py "C:\Users\voce\Videos\receitas"
 - Pastas chamadas `1-referencias` (vídeos do TikTok usados só como guia) são recusadas.
 - A transcrição fica em cache em `<pasta>/.recipe_cache/` — rodar de novo não retranscreve (só refaz a análise do Claude).
 - O primeiro uso do Whisper baixa o modelo (~75 MB no `tiny`, ~480 MB no `small`).
-- Com GPU NVIDIA, use `WHISPER_DEVICE=cuda` no `.env`.
+- O padrão é CPU (`WHISPER_DEVICE=cpu`). Com GPU NVIDIA **e** CUDA 12 + cuDNN instalados, dá para usar `WHISPER_DEVICE=cuda`; se faltar biblioteca da GPU, a ferramenta volta sozinha para a CPU.
 
 ---
 
