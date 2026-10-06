@@ -247,7 +247,7 @@ def main() -> int:
         + ("" if found else "\n[yellow]CapCut não encontrado — drafts salvos na pasta local acima. "
                             "Copie-os para a pasta de projetos do CapCut ou use --drafts-dir.[/]")
         + f"\n[bold]Claude:[/] {'MOCK' if args.mock_claude else settings.claude_model}"
-        + f"   [bold]Whisper:[/] {args.whisper_model} ({settings.whisper_language})",
+        + f"   [bold]Whisper:[/] {args.whisper_model} ({settings.whisper_language}, {settings.whisper_device.upper()})",
         title="🍳 Receitas → CapCut",
     ))
 
