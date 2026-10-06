@@ -21,7 +21,7 @@ A ferramenta pega uma pasta de vídeos de receita **gravados por nós** e devolv
    - **3 ganchos** de até 6 palavras, um de cada estilo:
      - A: **curiosidade** ("Big Mac fit? Existe.")
      - B: **benefício** ("Pizza sem forno em 10 minutos")
-     - C: **erro comum** ("Seu brigadeiro fit fica duro?")
+     - C: **erro comum ligado ao desejo**, como comer sem culpa ou com o sabor igual ("Seu Big Mac fit fica sem graça?"). Nada de detalhe técnico de preparo.
    - **CTA de Pinterest** que leva à página de vendas: "Essa e mais 24 receitas por R$ 27" (receita do e-book) ou "Quer mais receitas assim? 25 por R$ 27" (fora do e-book). Nunca usar "salva o post", "leia a legenda" ou "chama no direct".
    - **Título do pin** (até 100 caracteres, com a palavra-chave no começo: "coxinha fit", "doce sem açúcar", "marmita fit"…);
    - **Descrição do pin** (2 a 3 frases + 3 hashtags);
@@ -33,7 +33,7 @@ A ferramenta pega uma pasta de vídeos de receita **gravados por nós** e devolv
 5. **Gera 2 pins estáticos** (JPG 1000x1500) na pasta `pins/` ao lado do vídeo:
    - **Capa** (`<nome>_capa.jpg`): o frame mais bonito do prato pronto, com o título, o CTA e o selo "R$ 27".
    - **Colagem** (`<nome>_colagem.jpg`): 3 ou 4 passos numerados (ingredientes → preparo → forno → pronto).
-   - A IA escolhe os frames olhando as imagens e descarta borrado, escuro, mão na frente e marca d'água de terceiros. Mesmo assim, **confira antes de postar**.
+   - A IA avalia cada quadro: só entra quadro **sem texto queimado** (legenda, logo, marca d'água) e **com comida ou mão preparando**. Sem quadro bom, a capa ou a colagem é pulada, com aviso no relatório. Mesmo assim, **confira antes de postar**.
    - Exemplos em `docs/exemplos/`.
 6. **Atualiza o Notion** (ver "Integração com o Notion").
 7. **Salva um relatório** ao lado do vídeo: `nome-do-video_video_analise.md`. A seção **Formatos** diz o que postar em cada dia: **vídeo no dia 1, capa no dia 3, colagem no dia 5** (e, no A/B, vídeo B no dia 7 e C no dia 9).
@@ -102,4 +102,7 @@ Se a linha já existe, a ferramenta **só preenche o que está vazio**. O que j�
 - O corte é decidido pela **fala** e pela **imagem parada**. Se o vídeo termina com um take bonito do prato em silêncio, a IA pode cortar antes. Sempre confira o final.
 - Quantidades **não faladas** no vídeo são deduzidas e podem vir erradas. Sempre revise.
 - Nada de promessa de emagrecimento, "low carb" ou resultado: só "fit", "leve", "sem adicionar açúcar" e "rico em proteína" quando for verdade.
+- **Nada de números nutricionais** (calorias, gramas de proteína etc.) em título, descrição, gancho ou locução.
+- **Variação de receita do e-book** (ex.: taco de Big Mac, sendo que o e-book tem o Big Mac): "No e-book" fica desmarcado, o CTA é "Quer mais receitas assim? 25 por R$ 27" e o texto não diz que a receita está no e-book.
+- Linha marcada como **"Referência (não postar)"** nunca tem Origem nem Status alterados pela ferramenta.
 - Se o CapCut atualizar e os projetos sumirem, é ajuste técnico. Não precisa refazer nada.

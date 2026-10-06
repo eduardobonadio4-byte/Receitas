@@ -4,7 +4,7 @@ CLI em Python que pega uma pasta de vídeos de receita **gravados pela equipe** 
 
 1. Extrai o áudio com **FFmpeg** e transcreve localmente com **faster-whisper**.
 2. Detecta **imagem congelada** e **silêncio** no final (FFmpeg `freezedetect`/`silencedetect`).
-3. Manda tudo para o **Claude**, que devolve: ponto de corte, 3 ganchos (A curiosidade, B benefício, C erro comum, até 6 palavras), se a receita está no e-book Gostosuras Fit, título e descrição do pin, 3 hashtags, categoria/pasta e roteiro de locução (até 45 palavras). Termos proibidos (emagrecer, low carb, detox…) disparam uma nova tentativa automática.
+3. Manda tudo para o **Claude**, que devolve: ponto de corte, 3 ganchos (A curiosidade, B benefício, C erro comum ligado ao desejo, como comer sem culpa ou com o sabor igual; até 6 palavras), se a receita é **exata**, **variação** (ex.: taco de Big Mac) ou **não** está no e-book Gostosuras Fit (só "exata" conta como e-book), título e descrição do pin, 3 hashtags, categoria/pasta e roteiro de locução (até 45 palavras). Termos proibidos (emagrecer, low carb, detox…), **números nutricionais** (calorias, gramas de proteína…) e dizer que uma variação "está no e-book" disparam uma nova tentativa automática.
 4. Define o **CTA pelo código**: receita do e-book → "Essa e mais 24 receitas por R$ 27"; fora do e-book → "Quer mais receitas assim? 25 por R$ 27".
 5. Cria o **projeto nativo do CapCut Desktop** em 9:16, com o vídeo cortado e os textos dentro da área segura do Pinterest:
    - **Padrão (com preço):** gancho na faixa verde `#1A3D2B` (0–3s) + CTA na faixa laranja `#E07A3A` (últimos 3s).
@@ -13,7 +13,8 @@ CLI em Python que pega uma pasta de vídeos de receita **gravados pela equipe** 
 7. Gera 2 pins estáticos JPG 1000x1500 (2:3) em `pins/`, ao lado do vídeo, sem gravar nada a mais:
    - **`<nome>_capa.jpg`**: o melhor frame do prato pronto, com degradê verde, título com a palavra-chave em laranja, CTA e selo "R$ 27".
    - **`<nome>_colagem.jpg`**: 3 ou 4 momentos-chave (ingredientes → preparo → forno → pronto) numa grade numerada.
-   - Os frames são pré-filtrados por nitidez e brilho, e o **Claude escolhe olhando as imagens**: descarta borrado, escuro, mão na frente e texto ou marca d'água de terceiros. No `--mock-claude` só vale o filtro automático.
+   - Os frames são pré-filtrados por nitidez e brilho, e o **Claude avalia cada quadro**: só entram quadros **sem nenhum texto queimado** (legenda, logo, marca d'água) e **com comida ou mãos preparando**. Quadros repetidos ficam de fora, e a colagem sai em ordem cronológica.
+   - Sem quadro bom, a ferramenta procura numa janela maior; se ainda assim não houver, **pula a capa ou a colagem** (mínimo 3 passos) e avisa no relatório. No `--mock-claude` não há checagem de texto.
 8. Salva `<nome_do_video>_video_analise.md` ao lado do vídeo, com a seção **Formatos**: vídeo no dia 1, capa no dia 3, colagem no dia 5 (variações B/C do A/B nos dias 7 e 9).
 
 Links de cada pin: `https://receitaspraticasfit.com.br/?src=pin-<slug>` (no A/B: `-a`, `-b`, `-c`; capa: `-capa`; colagem: `-colagem`).
@@ -125,6 +126,7 @@ python main.py "C:\Users\voce\Videos\receitas"
 | `--estilo padrao\|cru` | Visual do vídeo quando o Notion ainda não define o `Estilo` da receita (padrão: `padrao`) |
 | `--no-notion` | Não lê nem escreve no Banco de Receitas |
 | `--sem-imagens` | Pula a capa e a colagem (gera só o vídeo) |
+| `--regenerar` | Refaz ganchos, título, descrição, CTA, locução, links e "No e-book" mesmo se o Notion já tiver (o `TESTAR.bat` usa). Nunca mexe em Vídeo editado, Estilo, métricas, nem em Origem/Status de linha marcada como referência |
 | `--overwrite` | Recria drafts que já existem com o mesmo nome |
 | `--skip-capcut` | Só gera análise + relatório |
 | `--drafts-dir PASTA` | Força a pasta de projetos do CapCut |

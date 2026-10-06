@@ -261,49 +261,111 @@ def render_colagem(frames: list[Path], title: str, keyword: str, cta: str, out: 
 
 
 # ---------------------------------------------------------------- orquestração
+MIN_STEPS = 3
+
+
+def _review(picker, cands: list[Candidate]) -> dict:
+    """Pede ao Claude o veredito de cada frame. Sem picker (mock) devolve {}."""
+    if picker is None or not cands:
+        return {}
+    return picker.review_frames([(c.id, _thumb(c.path)) for c in cands])
+
+
+def _valid(c: Candidate, verdicts: dict) -> bool:
+    v = verdicts.get(c.id)
+    return v is not None and not v.has_text and v.shows_food_or_hands
+
+
+def _best_capa(cands: list[Candidate], verdicts: dict) -> Candidate | None:
+    ok = [c for c in cands if _valid(c, verdicts)]
+    if not ok:
+        return None
+    return max(ok, key=lambda c: (verdicts[c.id].dish_ready, verdicts[c.id].score, c.score))
+
+
+MIN_GAP_S = 1.0       # passos da colagem precisam estar a pelo menos 1s um do outro
+SIMILAR_MAX_DIFF = 12  # diferença média (0-255) abaixo disso = quadro praticamente igual
+
+
+def _signature(c: Candidate) -> np.ndarray:
+    return np.asarray(Image.open(c.path).convert("L").resize((32, 56)), dtype=np.float32)
+
+
+def _too_similar(c: Candidate, taken: list[Candidate]) -> bool:
+    sig = _signature(c)
+    return any(abs(c.t - o.t) < MIN_GAP_S or np.abs(sig - _signature(o)).mean() < SIMILAR_MAX_DIFF
+               for o in taken)
+
+
+def _best_step(cands: list[Candidate], verdicts: dict, target: float, taken: list[Candidate]) -> Candidate | None:
+    """Melhor quadro limpo do passo: nota visual, perdendo pontos quanto mais longe do momento-chave.
+    Quadros repetidos (muito perto no tempo ou visualmente iguais a um já escolhido) ficam de fora."""
+    ok = [c for c in cands if _valid(c, verdicts) and not _too_similar(c, taken)]
+    if not ok:
+        return None
+    return max(ok, key=lambda c: (verdicts[c.id].score - 1.5 * abs(c.t - target), c.score))
+
+
 def build_pin_images(info: VideoInfo, analysis: RecipeAnalysis, out_dir: Path, work: Path,
                      picker=None) -> PinImages:
-    """Gera <nome>_capa.jpg e <nome>_colagem.jpg em out_dir. `picker` = RecipeAnalyzer (ou None no mock)."""
+    """Gera <nome>_capa.jpg e <nome>_colagem.jpg em out_dir. `picker` = RecipeAnalyzer (None no mock).
+
+    Com o Claude, só entram frames SEM texto e COM comida/mãos preparando; se não houver frame bom,
+    a peça é pulada (com aviso) em vez de sair com quadro ruim.
+    """
     result = PinImages()
     video, end = info.path, analysis.cut_end_seconds
+    stem = video.stem
 
-    # Capa: prato pronto costuma estar no final, antes das sobras já cortadas.
+    # 1ª passada: capa no final (prato pronto) + passos em volta de cada momento-chave.
     capa_cands = _top(_sample(video, end * 0.6, max(end - 0.15, 0.1), 10, "C", work), 6)
     steps = []
     for k, m in enumerate(analysis.key_moments, 1):
         lo, hi = max(m.seconds - 0.8, 0), min(m.seconds + 0.8, end - 0.05)
-        steps.append((m.label, _top(_sample(video, lo, hi, 4, f"S{k}-", work), 3)))
+        steps.append((m, _top(_sample(video, lo, hi, 4, f"S{k}-", work), 3)))
 
-    capa_pick = capa_cands[0]
-    step_picks = [cands[0] for _label, cands in steps]
-    if picker is not None:
+    if picker is None:  # mock: só nitidez/brilho
+        result.notes.append("Modo mock: frames escolhidos só por nitidez, sem checar texto queimado. Revise.")
+        capa_pick = capa_cands[0]
+        step_picks = [cands[0] for _m, cands in steps]
+    else:
         try:
-            choice = picker.choose_frames(
-                [(c.id, _thumb(c.path)) for c in capa_cands],
-                [(label, [(c.id, _thumb(c.path)) for c in cands]) for label, cands in steps],
-            )
-            by_id = {c.id: c for c in capa_cands}
-            if choice.capa_id in by_id:
-                capa_pick = by_id[choice.capa_id]
-            else:
-                result.notes.append("Claude não aprovou nenhum frame da capa: usei o mais nítido, revise.")
-            picked = []
-            for (label, cands), chosen in zip(steps, choice.step_ids + [""] * len(steps)):
-                match = next((c for c in cands if c.id == chosen), None)
-                if match:
-                    picked.append(match)
-            if len(picked) >= 3:
-                step_picks = picked
-            else:
-                result.notes.append("Menos de 3 passos aprovados pelo Claude: usei os mais nítidos, revise.")
-        except Exception as e:  # escolha por visão falhou: segue com a automática
-            result.notes.append(f"Escolha de frames pelo Claude falhou ({e}); usei os mais nítidos.")
+            verdicts = _review(picker, capa_cands + [c for _m, cands in steps for c in cands])
 
-    stem = video.stem
-    capa_full = _extract(video, capa_pick.t, work / "capa_full.jpg")
-    result.capa = render_capa(capa_full, analysis.image_title, analysis.image_keyword, analysis.cta,
-                              out_dir / f"{stem}_capa.jpg")
-    step_full = [_extract(video, c.t, work / f"step{i}_full.jpg") for i, c in enumerate(step_picks, 1)]
-    result.colagem = render_colagem(step_full, analysis.image_title, analysis.image_keyword, analysis.cta,
-                                    out_dir / f"{stem}_colagem.jpg")
+            capa_pick = _best_capa(capa_cands, verdicts)
+            if capa_pick is None:  # 2ª passada: procura o prato pronto em boa parte do vídeo
+                wide = _top(_sample(video, end * 0.3, max(end - 0.15, 0.1), 14, "CW", work), 8)
+                capa_pick = _best_capa(wide, _review(picker, wide))
+
+            step_picks = []
+            for k, (m, cands) in enumerate(steps, 1):
+                taken = list(step_picks)
+                pick = _best_step(cands, verdicts, m.seconds, taken)
+                if pick is None:  # 2ª passada: janela maior em volta do momento
+                    lo, hi = max(m.seconds - 2.5, 0), min(m.seconds + 2.5, end - 0.05)
+                    wide = _top(_sample(video, lo, hi, 6, f"SW{k}-", work), 4)
+                    pick = _best_step(wide, _review(picker, wide), m.seconds, taken)
+                if pick is None:
+                    result.notes.append(f"Passo '{m.label}' sem quadro limpo e diferente dos outros "
+                                        f"(texto, sem comida ou repetido): ficou de fora.")
+                else:
+                    step_picks.append(pick)
+        except Exception as e:  # avaliação falhou: não arrisca publicar frame com texto
+            result.notes.append(f"Avaliação dos frames pelo Claude falhou ({e}); capa e colagem não geradas.")
+            return result
+
+    if capa_pick is None:
+        result.notes.append("Capa não gerada: nenhum frame do prato pronto sem texto queimado.")
+    else:
+        capa_full = _extract(video, capa_pick.t, work / "capa_full.jpg")
+        result.capa = render_capa(capa_full, analysis.image_title, analysis.image_keyword, analysis.cta,
+                                  out_dir / f"{stem}_capa.jpg")
+
+    step_picks.sort(key=lambda c: c.t)  # colagem sempre em ordem cronológica
+    if len(step_picks) < MIN_STEPS:
+        result.notes.append(f"Colagem não gerada: só {len(step_picks)} passo(s) com quadro limpo (mínimo {MIN_STEPS}).")
+    else:
+        step_full = [_extract(video, c.t, work / f"step{i}_full.jpg") for i, c in enumerate(step_picks, 1)]
+        result.colagem = render_colagem(step_full, analysis.image_title, analysis.image_keyword, analysis.cta,
+                                        out_dir / f"{stem}_colagem.jpg")
     return result

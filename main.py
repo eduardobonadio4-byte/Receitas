@@ -51,6 +51,8 @@ def parse_args() -> argparse.Namespace:
                    help="Cria 1 draft por gancho (_A, _B, _C) para teste A/B (só no estilo padrão)")
     p.add_argument("--estilo", choices=sorted(ESTILOS), default="padrao",
                    help="Visual do vídeo quando o Notion ainda não define o Estilo (padrão: padrao)")
+    p.add_argument("--regenerar", action="store_true",
+                   help="Refaz ganchos/título/descrição/CTA/links mesmo se o Notion já tiver (testes e refações)")
     p.add_argument("--sem-imagens", action="store_true", help="Não gera a capa nem a colagem (só o vídeo)")
     p.add_argument("--no-notion", action="store_true", help="Não lê nem escreve no Banco de Receitas")
     p.add_argument("--skip-capcut", action="store_true", help="Gera só a análise/relatório, sem criar o draft")
@@ -121,14 +123,15 @@ def process_video(
     analysis = analyzer.analyze(info, segments, dead, ctx) if analyzer else mock_analysis(info, segments, ctx)
 
     row = notion.find(analysis.recipe_name) if notion else None
-    merge_with_notion(analysis, row)
+    if not args.regenerar:  # sem --regenerar, o que a equipe escreveu no Notion manda no vídeo
+        merge_with_notion(analysis, row)
 
     # Estilo: o do Notion manda; senão, o da linha de comando.
     estilo = next((k for k, label in ESTILOS.items() if row and row.get("Estilo") == label), args.estilo)
     ab = args.ab_hooks and estilo == "padrao"
 
     slug = slugify(analysis.recipe_name)
-    on_air_hook = (row.get("Gancho") if row else None) or analysis.hook_curiosidade
+    on_air_hook = (row.get("Gancho") if row and not args.regenerar else None) or analysis.hook_curiosidade
     if ab:
         variants = [DraftVariant(label, hook, pin_link(SALES_PAGE_URL, slug, label))
                     for label, hook in zip("ABC", analysis.hooks)]
@@ -181,8 +184,10 @@ def process_video(
             "Pasta": analysis.pasta,
             "Origem do vídeo": "Gravado por nós",
             "Status": "Editado",
-        }, dry_run=dry_run)
+        }, dry_run=dry_run, regenerate=args.regenerar)
         notion_status = f"linha \"{analysis.recipe_name}\" {action}"
+        if row and row.get("Origem do vídeo") == "Referência (não postar)":
+            notion_status += " · marcada como REFERÊNCIA (não postar): Origem/Status mantidos"
         if dry_run:
             notion_status += " (mock: nada foi gravado)"
             step_print(f"[magenta]Notion (simulação, nada gravado) — linha \"{analysis.recipe_name}\" "
@@ -199,8 +204,9 @@ def process_video(
         wav.unlink(missing_ok=True)
 
     drafts = ", ".join(v.path.name for v in variants if v.path) or "(sem draft)"
-    if pins.capa:
-        drafts += f" · pins: {pins.capa.name}, {pins.colagem.name}"
+    pin_files = [p.name for p in (pins.capa, pins.colagem) if p]
+    if pin_files:
+        drafts += f" · pins: {', '.join(pin_files)}"
     return Result(
         video=video.name,
         ok=True,

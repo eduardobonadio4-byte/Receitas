@@ -7,11 +7,14 @@ import unicodedata
 from dataclasses import dataclass, field
 
 import anthropic
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from pydantic.json_schema import SkipJsonSchema
 
 from config import (
-    CTA_IN_EBOOK, CTA_NOT_IN_EBOOK, DEFAULT_CATEGORIAS, DEFAULT_PASTAS, EBOOK_RECIPES, FORBIDDEN_PATTERNS,
+    CTA_IN_EBOOK, CTA_NOT_IN_EBOOK, DEFAULT_CATEGORIAS, DEFAULT_PASTAS, EBOOK_CLAIM_PATTERN, EBOOK_RECIPES,
+    FORBIDDEN_PATTERNS, NUTRITION_PATTERNS,
 )
 from app.media import DeadZones, VideoInfo
 from app.transcriber import Segment, format_transcript
@@ -24,7 +27,10 @@ class KeyMoment(BaseModel):
 
 class RecipeAnalysis(BaseModel):
     recipe_name: str = Field(description="Nome da receita. Se já existir no banco, use EXATAMENTE o nome de lá")
-    in_ebook: bool = Field(description="True se a receita é uma das 25 do e-book Gostosuras Fit")
+    ebook_match: Literal["exata", "variacao", "nao"] = Field(
+        description="exata = é uma das 25 receitas do e-book no MESMO formato; variacao = usa o sabor/nome de "
+                    "uma delas em outro formato (ex.: taco de Big Mac x Big Mac); nao = não tem relação")
+    ebook_recipe: str = Field(description="Qual das 25 receitas do e-book (vazio se ebook_match = nao)")
     categoria: str = Field(description="Uma das categorias permitidas")
     pasta: str = Field(description="Uma das pastas do Pinterest permitidas")
     cut_end_seconds: float = Field(description="Segundo exato onde o vídeo deve terminar")
@@ -41,6 +47,7 @@ class RecipeAnalysis(BaseModel):
     image_keyword: str = Field(description="Trecho de image_title a destacar em laranja (a palavra-chave)")
     key_moments: list[KeyMoment] = Field(description="3 ou 4 momentos-chave em ordem: ingredientes, "
                                                      "preparo, forno/frigideira, pronto")
+    in_ebook: SkipJsonSchema[bool] = False  # = ebook_match == "exata" (definido pelo código)
     cta: SkipJsonSchema[str] = ""  # definido pelo código a partir de in_ebook (fora do schema do modelo)
 
     @property
@@ -68,13 +75,17 @@ Regras:
 - GANCHOS (texto dos primeiros 3 segundos, até 6 palavras cada, sem emoji):
   A = curiosidade (ex.: "Big Mac fit? Existe.")
   B = benefício (ex.: "Pizza sem forno em 10 minutos")
-  C = erro comum (ex.: "Seu brigadeiro fit fica duro?")
-- E-BOOK: marque in_ebook=true só se a receita for uma destas: {", ".join(EBOOK_RECIPES)}. Variações do mesmo prato contam (ex.: "coxinha de frango fit" = coxinha).
+  C = erro comum ligado ao DESEJO do público (comer o lanche/doce sem culpa, com o sabor de verdade), nunca a detalhe técnico de preparo (ex.: "Seu Big Mac fit fica sem graça?", "Brigadeiro fit sem gosto de brigadeiro?")
+- E-BOOK (25 receitas): {", ".join(EBOOK_RECIPES)}.
+  ebook_match = "exata" só se o vídeo for uma dessas receitas no MESMO formato (ex.: "coxinha de frango fit" = coxinha).
+  Se usar o nome/sabor de uma delas em OUTRO formato (taco de Big Mac, wrap de Big Mac, bolo de brigadeiro), é "variacao".
+  Em "variacao" ou "nao", NUNCA diga que a receita está no e-book.
 - TÍTULO DO PIN: até 100 caracteres, começando pela palavra-chave de busca (ex.: "coxinha fit", "doce sem açúcar", "marmita fit").
 - DESCRIÇÃO DO PIN: 2 a 3 frases naturais em português do Brasil, sem hashtags (vão no campo próprio).
-  Se a receita NÃO estiver no e-book, a descrição entrega a receita resumida (ingredientes principais + modo de preparo em uma frase) e não promete que ela está no e-book.
+  Se ebook_match não for "exata", a descrição entrega a receita resumida (ingredientes principais + modo de preparo em uma frase) e não promete que ela está no e-book.
 - HASHTAGS: exatamente 3.
 - LOCUÇÃO: no máximo 45 palavras, ritmo de narração, pronta para voz de IA.
+- PROIBIDO citar números nutricionais em qualquer texto: calorias, kcal, gramas de proteína/carboidrato/gordura etc. "Rico em proteína" pode, se for verdade.
 - PROIBIDO em qualquer texto: emagrecer, low carb, perder peso, detox, garantia de resultado, ou qualquer promessa de resultado no corpo. Use só "fit", "leve", "sem adicionar açúcar" e "rico em proteína" quando for verdade.
 - PROIBIDO pedir "salva o post", "leia a legenda" ou "chama no direct".
 - INGREDIENTES: só o que aparece na transcrição; se não houver, deduza o essencial e mantenha curto.
@@ -82,16 +93,24 @@ Regras:
 - MOMENTOS-CHAVE: 3 ou 4, em ordem cronológica e dentro do ponto de corte: ingredientes → preparo → forno/frigideira → pronto. Use os timestamps da transcrição para achar o segundo de cada etapa."""
 
 
-class FrameChoice(BaseModel):
-    capa_id: str = Field(description="ID do melhor frame para a capa, ou vazio se nenhum serve")
-    step_ids: list[str] = Field(description="Um ID por passo, na ordem dos passos; vazio se nenhum serve")
+class FrameVerdict(BaseModel):
+    id: str = Field(description="ID do frame avaliado")
+    has_text: bool = Field(description="True se há QUALQUER texto escrito na imagem: legenda, título, preço, "
+                                       "logo, @usuário, marca d'água, emoji (texto em embalagem/rótulo também conta)")
+    shows_food_or_hands: bool = Field(description="True se a comida (ou mãos preparando a comida) aparece com "
+                                                  "clareza e ocupa boa parte do quadro; False se o quadro está vazio, "
+                                                  "mostra só bancada/fundo, pessoa falando ou utensílio sem comida")
+    dish_ready: bool = Field(description="True se mostra o prato PRONTO para comer, inteiro e bem apresentado")
+    score: int = Field(description="Nota visual 0 a 10: nitidez, luz, apetite, sem obstrução")
 
 
-FRAME_PROMPT = """Você escolhe frames de um vídeo de receita para virar pins do Pinterest.
-CAPA (IDs C*): escolha o frame do PRATO PRONTO mais nítido, bem iluminado e apetitoso, com o prato inteiro visível.
-PASSOS (IDs S*): para cada passo, escolha o frame que mostra melhor aquela etapa, nítido e bem iluminado.
-Descarte sempre: frame borrado, escuro, com mão ou utensílio cobrindo a comida, ou com QUALQUER texto, logo,
-@usuário ou marca d'água de terceiros (TikTok, Reels, Kwai etc.). Se nenhum candidato servir, devolva vazio."""
+class FrameReview(BaseModel):
+    verdicts: list[FrameVerdict] = Field(description="Uma avaliação para CADA frame recebido")
+
+
+FRAME_PROMPT = """Você revisa frames de um vídeo de receita que vão virar pins do Pinterest. Avalie CADA frame recebido.
+Seja rigoroso com texto: qualquer letra, número, legenda queimada, logo ou marca d'água conta como has_text=true,
+mesmo pequeno ou no canto. Quadro sem comida visível (só bancada, fundo, rosto, mão vazia) é shows_food_or_hands=false."""
 
 
 class AnalysisError(RuntimeError):
@@ -104,7 +123,11 @@ def _normalize(text: str) -> str:
 
 def find_forbidden_terms(a: RecipeAnalysis) -> list[str]:
     blob = _normalize(" ".join([a.pin_title, a.pin_description, a.voiceover, a.image_title, *a.hooks, *a.hashtags]))
-    return [term for term, pattern in FORBIDDEN_PATTERNS.items() if re.search(pattern, blob)]
+    found = [term for term, pattern in FORBIDDEN_PATTERNS.items() if re.search(pattern, blob)]
+    found += [f"número nutricional ({term})" for term, pattern in NUTRITION_PATTERNS.items() if re.search(pattern, blob)]
+    if a.ebook_match != "exata" and re.search(EBOOK_CLAIM_PATTERN, blob):
+        found.append("diz que a receita está no e-book, mas ela não está nesse formato")
+    return found
 
 
 def _fmt_intervals(intervals: list[tuple[float, float]]) -> str:
@@ -134,42 +157,35 @@ class RecipeAnalyzer:
         forbidden = find_forbidden_terms(analysis)
         if forbidden:
             # Uma nova tentativa, avisando o que foi usado indevidamente.
-            analysis = self._call(prompt + f"\n\nATENÇÃO: uma versão anterior usou termos proibidos "
-                                           f"({', '.join(forbidden)}). Não use esses termos nem sinônimos.")
+            analysis = self._call(prompt + f"\n\nATENÇÃO: uma versão anterior quebrou regras "
+                                           f"({'; '.join(forbidden)}). Corrija: nada de termos proibidos, "
+                                           f"nada de números nutricionais e não prometa o e-book se não for exata.")
             forbidden = find_forbidden_terms(analysis)
             if forbidden:
                 raise AnalysisError(f"Texto gerado com termos proibidos: {', '.join(forbidden)}")
 
         return sanitize(analysis, info.duration, ctx)
 
-    def choose_frames(self, capa: list[tuple[str, bytes]],
-                      steps: list[tuple[str, list[tuple[str, bytes]]]]) -> FrameChoice:
-        """Escolhe frames olhando as imagens. capa/steps trazem (id, jpeg_bytes)."""
-        def image_block(data: bytes) -> dict:
-            return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                "data": base64.b64encode(data).decode()}}
-
-        content: list[dict] = [{"type": "text", "text": "CANDIDATOS PARA A CAPA:"}]
-        for frame_id, data in capa:
-            content += [{"type": "text", "text": frame_id}, image_block(data)]
-        for i, (label, cands) in enumerate(steps, 1):
-            content.append({"type": "text", "text": f"PASSO {i} ({label}):"})
-            for frame_id, data in cands:
-                content += [{"type": "text", "text": frame_id}, image_block(data)]
-
+    def review_frames(self, frames: list[tuple[str, bytes]]) -> dict[str, FrameVerdict]:
+        """Avalia cada frame (id, jpeg_bytes) olhando a imagem. Devolve {id: veredito}."""
+        content: list[dict] = [{"type": "text", "text": f"{len(frames)} frames para avaliar:"}]
+        for frame_id, data in frames:
+            content += [{"type": "text", "text": frame_id},
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                     "data": base64.b64encode(data).decode()}}]
         try:
             response = self.client.messages.parse(
                 model=self.model,
                 max_tokens=16000,
                 system=FRAME_PROMPT,
                 messages=[{"role": "user", "content": content}],
-                output_format=FrameChoice,
+                output_format=FrameReview,
             )
         except anthropic.APIError as e:
-            raise AnalysisError(f"Falha ao escolher frames: {e}") from e
+            raise AnalysisError(f"Falha ao avaliar frames: {e}") from e
         if response.stop_reason == "refusal" or response.parsed_output is None:
-            raise AnalysisError("Escolha de frames sem resposta válida")
-        return response.parsed_output
+            raise AnalysisError("Avaliação de frames sem resposta válida")
+        return {v.id: v for v in response.parsed_output.verdicts}
 
     def _call(self, prompt: str) -> RecipeAnalysis:
         try:
@@ -230,6 +246,7 @@ def sanitize(a: RecipeAnalysis, duration: float, ctx: AnalysisContext | None = N
         moments = [KeyMoment(label=lab, seconds=round(end * f, 2))
                    for lab, f in zip(labels, (0.12, 0.38, 0.64, 0.9))]
     a.key_moments = moments
+    a.in_ebook = a.ebook_match == "exata"
     a.cta = CTA_IN_EBOOK if a.in_ebook else CTA_NOT_IN_EBOOK
     return a
 
@@ -239,14 +256,15 @@ def mock_analysis(info: VideoInfo, segments: list[Segment], ctx: AnalysisContext
     last_speech = segments[-1].end + 1.0 if segments else info.duration
     return sanitize(RecipeAnalysis(
         recipe_name=info.path.stem,
-        in_ebook=False,
+        ebook_match="nao",
+        ebook_recipe="",
         categoria="Doce",
         pasta="Doces Fit sem Açúcar",
         cut_end_seconds=min(last_speech, info.duration),
         cut_reason="Mock: corte 1s após a última fala",
         hook_curiosidade="Bolo fit sem farinha? Existe.",
         hook_beneficio="Pronto em 10 minutos",
-        hook_erro_comum="Seu bolo fit fica seco?",
+        hook_erro_comum="Seu bolo fit fica sem graça?",
         pin_title=f"{info.path.stem} fit: receita fácil",
         pin_description="Descrição de teste gerada pelo modo --mock-claude. Receita resumida aqui.",
         hashtags=["#receitafit", "#docefit", "#semacucar"],

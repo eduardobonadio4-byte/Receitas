@@ -8,7 +8,9 @@ from pathlib import Path
 import pycapcut as cc
 from pycapcut import SEC, ClipSettings, TextBackground, TextBorder, TextSegment, TextStyle, Timerange, TrackType
 
-from config import BRAND_FONT, BRAND_GREEN, BRAND_ORANGE, CANVAS_H, CANVAS_W, CTA_Y, HOOK_Y
+from config import (
+    BRAND_FONT, BRAND_GREEN, BRAND_ORANGE, CANVAS_H, CANVAS_W, CTA_Y, HOOK_FONT_SIZE, HOOK_MAX_WIDTH, HOOK_Y,
+)
 from app.media import VideoInfo
 
 
@@ -29,8 +31,19 @@ def _font():
     return getattr(cc.FontType, BRAND_FONT, None)
 
 
-def _style(size: float) -> TextStyle:
-    return TextStyle(size=size, bold=True, color=(1.0, 1.0, 1.0), align=1, auto_wrapping=True, max_line_width=0.8)
+def _style(size: float, max_width: float = 0.8) -> TextStyle:
+    return TextStyle(size=size, bold=True, color=(1.0, 1.0, 1.0), align=1, auto_wrapping=True,
+                     max_line_width=max_width)
+
+
+def two_lines(text: str) -> str:
+    """Quebra o texto em no máximo 2 linhas com tamanhos parecidos (fica mais largo e legível)."""
+    words = text.split()
+    if len(words) < 3:
+        return " ".join(words)
+    best = min(range(1, len(words)),
+               key=lambda i: max(len(" ".join(words[:i])), len(" ".join(words[i:]))))
+    return " ".join(words[:best]) + "\n" + " ".join(words[best:])
 
 
 def _band(color: str) -> TextBackground:
@@ -102,7 +115,8 @@ def _build_one(
         # Padrão (com preço): gancho na faixa verde (0-3s) + CTA na faixa laranja (últimos 3s).
         hook_us = min(int(hook_duration_s * SEC), clip_us)
         script.add_segment(
-            TextSegment(hook_text, Timerange(0, hook_us), font=_font(), style=_style(10.0),
+            TextSegment(two_lines(hook_text), Timerange(0, hook_us), font=_font(),
+                        style=_style(HOOK_FONT_SIZE, HOOK_MAX_WIDTH),
                         background=_band(BRAND_GREEN), clip_settings=ClipSettings(transform_y=HOOK_Y)),
             "gancho",
         )

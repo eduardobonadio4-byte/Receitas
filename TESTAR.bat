@@ -36,14 +36,14 @@ rem ---------- Rodada 1: sem gastar API e sem gravar no Notion ----------
 echo.
 echo ===== RODADA 1 de 2: --mock-claude (nao gasta API, nao grava no Notion) =====
 >>"%LOG%" echo ===== RODADA 1: --ab-hooks --mock-claude --whisper-model tiny =====
-"%VPY%" tools\tee.py "%LOG%" -- "%VPY%" main.py "%PASTA%" --ab-hooks --mock-claude --whisper-model tiny --overwrite
+"%VPY%" tools\tee.py "%LOG%" -- "%VPY%" main.py "%PASTA%" --ab-hooks --mock-claude --whisper-model tiny --overwrite --regenerar
 if errorlevel 1 goto falha1
 
 rem ---------- Rodada 2: Claude de verdade + grava no Notion ----------
 echo.
 echo ===== RODADA 2 de 2: Claude real + Notion =====
 >>"%LOG%" echo ===== RODADA 2: --ab-hooks --whisper-model tiny =====
-"%VPY%" tools\tee.py "%LOG%" -- "%VPY%" main.py "%PASTA%" --ab-hooks --whisper-model tiny --overwrite
+"%VPY%" tools\tee.py "%LOG%" -- "%VPY%" main.py "%PASTA%" --ab-hooks --whisper-model tiny --overwrite --regenerar
 if errorlevel 1 goto falha2
 
 echo.

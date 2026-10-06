@@ -17,6 +17,14 @@ API = "https://api.notion.com/v1"
 NOTION_VERSION = "2025-09-03"
 TITLE_PROP = "Receita"
 STATUS_UPGRADABLE = {"", "Ideia", "Texto pronto"}
+ORIGEM_REFERENCIA = "Referência (não postar)"
+
+# Campos que a ferramenta gera e que o --regenerar pode sobrescrever (nunca Vídeo editado, Estilo, métricas, Origem).
+REGENERABLE = {
+    "Gancho A (curiosidade)", "Gancho B (benefício)", "Gancho C (erro comum)", "Gancho",
+    "Título do pin", "Descrição", "CTA", "Roteiro de locução", "No e-book",
+    "Link do pin", "Link B", "Link C", "Link capa", "Link colagem",
+}
 
 # Campos de texto que a ferramenta gera e que, se já preenchidos no Notion, prevalecem no vídeo.
 TEXT_FIELDS = [
@@ -128,12 +136,13 @@ class NotionClient:
             return {"checkbox": bool(value)}
         return None  # campo inexistente ou tipo não suportado: ignora
 
-    def upsert(self, recipe_name: str, fields: dict[str, object],
-               dry_run: bool = False) -> tuple[str, dict[str, object]]:
+    def upsert(self, recipe_name: str, fields: dict[str, object], dry_run: bool = False,
+               regenerate: bool = False) -> tuple[str, dict[str, object]]:
         """Cria ou completa a linha da receita.
 
-        Retorna (acao, campos_escritos). Com dry_run=True nada é enviado ao Notion:
-        só calcula o que seria escrito.
+        Retorna (acao, campos_escritos). Com dry_run=True nada é enviado ao Notion: só calcula o que seria
+        escrito. Com regenerate=True, os campos gerados (REGENERABLE) são sobrescritos mesmo se preenchidos.
+        Linha marcada como "Referência (não postar)" nunca tem Origem nem Status alterados.
         """
         row = self.find(recipe_name)
         props: dict[str, dict] = {}
@@ -153,12 +162,17 @@ class NotionClient:
             self.rows[recipe_name.strip().casefold()] = NotionRow(page["id"], {TITLE_PROP: recipe_name, **fields})
             return "criada", written
 
+        is_reference = row.get("Origem do vídeo") == ORIGEM_REFERENCIA
         for name, value in fields.items():
             current = row.get(name)
-            if name == "Origem do vídeo":
+            if name in ("Origem do vídeo", "Status") and is_reference:
+                write = False  # marcação manual da equipe: vídeo de referência não vira "Editado"
+            elif name == "Origem do vídeo":
                 write = current != value
             elif name == "Status":
                 write = (current or "") in STATUS_UPGRADABLE and current != value
+            elif regenerate and name in REGENERABLE:
+                write = current != value and not (value is None or value == "")
             else:
                 write = _is_empty(current) and not _is_empty(value)
             if write and (enc := self._encode(name, value)):

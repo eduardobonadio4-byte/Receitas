@@ -38,6 +38,15 @@ FORBIDDEN_PATTERNS = {
     "garantia de resultado": r"garanti\w*\s+(de\s+)?resultado|resultados?\s+garantid",
 }
 
+# Números nutricionais (calorias, gramas de proteína/carbo/gordura etc.): proibidos nos textos.
+# Não temos a tabela nutricional do e-book; se um dia houver, liberar só para receitas "exata".
+NUTRITION_PATTERNS = {
+    "calorias": r"\d+[\d.,]*\s*(k?cal\b|calorias?)",
+    "gramas de nutriente": r"\d+[\d.,]*\s*(g|gr|gramas?)\b\s*(de\s+)?(proteinas?|carboidratos?|carbos?|gorduras?|fibras?|acucar(es)?)",
+}
+# Promessa de que a receita está no e-book (só pode quando a receita do vídeo é exatamente uma das 25).
+EBOOK_CLAIM_PATTERN = r"\b(essa|esta|ela|este|esse)\b[^.?!]{0,50}\b(esta|estao|vem|vêm|faz parte|fazem parte)\b[^.?!]{0,20}\be-?book"
+
 # Opções do Banco de Receitas (usadas quando o Notion não está configurado;
 # com o Notion ativo, as opções são lidas do próprio banco).
 DEFAULT_CATEGORIAS = ["Lanche", "Doce", "Salgado", "Café da manhã", "Marmita"]
@@ -63,7 +72,10 @@ PIN_FONT_FILE = Path(__file__).resolve().parent / "assets" / "fonts" / "Poppins-
 # No CapCut, transform_y vai de +1 (topo) a -1 (base), em unidades de meia tela:
 #   limite de cima  = 1 - 2*0.15 = +0.70 ; limite de baixo = -1 + 2*0.20 = -0.60
 SAFE_TOP_Y, SAFE_BOTTOM_Y = 0.70, -0.60
-HOOK_Y = 0.42   # centro do gancho, com folga abaixo de +0.70
+HOOK_Y = 0.42   # centro do gancho, com folga abaixo de +0.70 (2 linhas grandes ainda ficam abaixo)
+# Gancho 0–3s: 2x o tamanho original (10 → 20), até ~70% da largura, no máximo 2 linhas.
+HOOK_FONT_SIZE = float(os.environ.get("HOOK_FONT_SIZE", "20"))
+HOOK_MAX_WIDTH = 0.70
 CTA_Y = -0.38   # centro do CTA, com folga acima de -0.60
 
 # Pasta usada quando nenhuma instalação do CapCut é encontrada (ex.: Linux, testes).
